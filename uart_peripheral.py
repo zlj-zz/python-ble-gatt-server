@@ -18,7 +18,6 @@ from ai.bt.example_advertisement import Advertisement
 from ai.bt.example_advertisement import register_ad_cb, register_ad_error_cb
 from ai.bt.example_gatt_server import Service, Characteristic
 from ai.bt.example_gatt_server import register_app_cb, register_app_error_cb
-import ai.coloredlogging
 import ai.featurequeue
 import ai.marsglobal
 import ai.action.move.movement
@@ -33,11 +32,8 @@ LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_MANAGER_IFACE = 'org.bluez.GattManager1'
 GATT_CHRC_IFACE = 'org.bluez.GattCharacteristic1'
 UART_SERVICE_UUID = '6e400001-b5a3-f393-00a9-e50e24dcca9e'
-UART_RX_CHARACTERISTIC_UUID = '6e400002-b5a3-f393-00a9-e50e24dcca9e'
-UART_TX_CHARACTERISTIC_UUID = '6e400003-b5a3-f393-00a9-e50e24dcca9e'
-UART_UD_CHARACTERISTIC_UUID = '6e400004-b5a3-f393-00a9-e50e24dcca9e'
-UART_BE_CHARACTERISTIC_UUID = '6e400005-b5a3-f393-00a9-e50e24dcca9e'
-UART_SE_CHARACTERISTIC_UUID = '6e400006-b5a3-f393-00a9-e50e24dcca9e'
+UART_RX_CHARACTERISTIC_UUID = '6e400012-b5a3-f393-00a9-e50e24dcca9e'
+UART_TX_CHARACTERISTIC_UUID = '6e400013-b5a3-f393-00a9-e50e24dcca9e'
 mainloop = None
 global fb
 fb = None
@@ -48,12 +44,8 @@ class RxCharacteristic(Characteristic):
     def __init__(self, bus, index, service):
         Characteristic.__init__(self, bus, index, UART_RX_CHARACTERISTIC_UUID,
                                 ['write'], service)
-        self.logger = ai.coloredlogging.get_logger("Move",
-                                                   ai.coloredlogging.BLUE)
-        self.logger.addHandler(logging.NullHandler())
 
     def WriteValue(self, value, options):
-        self.logger.debug('remote: {}'.format(bytearray(value).decode()))
         bytes(value).decode()
 
 
@@ -69,9 +61,6 @@ class PlayCharacteristic(Characteristic):
     def __init__(self, bus, index, service):
         Characteristic.__init__(self, bus, index, UART_TX_CHARACTERISTIC_UUID,
                                 ['read', 'write', 'notify'], service)
-        self.logger = ai.coloredlogging.get_logger("Play",
-                                                   ai.coloredlogging.WHITE)
-        self.logger.addHandler(logging.NullHandler())
 
         self.notifying = False
         self.notify_type = 'Move'
@@ -90,9 +79,7 @@ class PlayCharacteristic(Characteristic):
         Let client to write data to here.
         Receive notify type data to change the notify type.
         Receive command to enable and disable the control mode.
-        Receive action command to control MarsCat.
         """
-        self.logger.debug('recive type: {}'.format(bytearray(value).decode()))
         s = bytes(value).decode()
         if s in self.notify_type_list:
             self.notify_type = s
@@ -111,21 +98,19 @@ class PlayCharacteristic(Characteristic):
 
     def StartNotify(self):
         if self.notifying:
-            self.logger.debug('Already notifying, nothing to do')
             return
 
         self.notifying = True
         self.toggle_notification()
-        self.logger.debug('start notifying')
+        print('start notifying')
 
     def StopNotify(self):
         if not self.notifying:
-            self.logger.debug('Not notifying, nothing to do')
             return
 
         self.notifying = False
         self.toggle_notification()
-        self.logger.debug('stop notifying')
+        print('stop notifying')
 
     def check_if_clear_data(self):
         if ai.marsglobal.MarsControl.ble_clear_counter > 3:
@@ -174,8 +159,6 @@ class PlayCharacteristic(Characteristic):
                 touch_data = 'jaw'
             elif touch_list[2] == 0:
                 touch_data = 'body'
-            # elif l[1] == 0 or l[2] == 0:
-            # data = 'head'
             else:
                 touch_data = 'other'
         else:
@@ -203,7 +186,6 @@ class PlayCharacteristic(Characteristic):
         send_dict['gyro'] = gyro_list
 
         data = json.dumps(send_dict)
-        self.logger.debug('data : [{}]'.format(data))
 
         value = []
         for b in data:
@@ -264,19 +246,13 @@ class UpdateCharacteristic(Characteristic):
         Characteristic.__init__(self, bus, index, UART_UD_CHARACTERISTIC_UUID,
                                 ['write', 'read'], service)
         self.md5 = False
-        self.logger = ai.coloredlogging.get_logger("Update",
-                                                   ai.coloredlogging.GREEN)
-        self.logger.addHandler(logging.NullHandler())
 
     def ReadValue(self, options):
         """
         Send marsai version
         """
-        self.logger.debug('>>>>>>> Update Characteristic [read]')
         with open(ai.parameters.VERSION_PATH) as f:
             data = f.read()
-
-        self.logger.debug('read: ' + repr(data))
 
         value = []
         for b in data:
@@ -291,35 +267,28 @@ class UpdateCharacteristic(Characteristic):
         global i
         if bytes(value) == b'SUD':
             i = 0
-            self.logger.debug('create ZIP file and wait recive')
-            if os.path.exists(str(pathlib.Path.home()) + '/marsai.zip'):
+            if os.path.exists(str(pathlib.Path.home()) + '/update.zip'):
                 os.system(
-                    'rm {}'.format(str(pathlib.Path.home()) + '/marsai.zip'))
+                    'rm {}'.format(str(pathlib.Path.home()) + '/update.zip'))
             os.system(
-                'touch {}'.format(str(pathlib.Path.home()) + '/marsai.zip'))
-            fb = open(str(pathlib.Path.home()) + '/marsai.zip', 'ab+')
+                'touch {}'.format(str(pathlib.Path.home()) + '/update.zip'))
+            fb = open(str(pathlib.Path.home()) + '/update.zip', 'ab+')
         elif bytes(value) == b'EOM':
             fb.close()
-            self.logger.debug('revice over')
         elif bytes(value) == b'MD5':
             self.md5 = True
-            self.logger.debug('prepare to verify MD5')
         elif self.md5:
             self.md5 = False
 
             file_md5 = bytearray(value).decode()
-            self.logger.debug('recive MD5: {}'.format(file_md5))
 
-            md5 = self.get_md5(str(pathlib.Path.home()) + '/marsai.zip')
-            self.logger.debug('local file MD5: {}'.format(md5))
+            md5 = self.get_md5(str(pathlib.Path.home()) + '/update.zip')
 
             if file_md5 == md5:
-                os.system('unzip -o ~/marsai.zip -d ~/marsai')
+                os.system('unzip -o ~/update.zip -d ~/update')
                 time.sleep(1)
                 os.system('reboot')
-                self.logger.debug('update ok')
             else:
-                self.logger.debug('md5 error')
                 raise Exception('md5 not same')
         else:
             fb.write(bytes(value))
@@ -335,143 +304,11 @@ class UpdateCharacteristic(Characteristic):
         return md5_code
 
 
-class BasicCharacteristic(Characteristic):
-    """
-    The characteristic is used for the Basic page of the app.
-    Read basic information and modify basic setting.
-    """
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, UART_BE_CHARACTERISTIC_UUID,
-                                ['write', 'read'], service)
-        self.logger = ai.coloredlogging.get_logger("Basic",
-                                                   ai.coloredlogging.YELLOW)
-        self.logger.addHandler(logging.NullHandler())
-
-    def WriteValue(self, value, options):
-        """
-        Rewrite the modified value to the file of the cat's setting.
-        """
-        self.logger.debug('>>>>>>> Basic Characteristic [write]')
-        self.logger.debug('remote: {}'.format(bytearray(value).decode()))
-        info_list = bytes(value).decode().split('-')
-
-        # write to personality.json
-        with open(ai.parameters.PERSONALITY_SAVE_PATH, 'r') as f:
-            data = json.load(f)
-            data['energetic'] = float(info_list[0])
-            data['enthusiastic'] = float(info_list[1])
-            data['social'] = float(info_list[2])
-        with open(ai.parameters.PERSONALITY_SAVE_PATH, 'w') as f:
-            json.dump(data, f)
-
-        # write to setting.json
-        with open(ai.parameters.SETTING_PATH, 'r') as fs:
-            data = json.load(fs)
-            data['eye'] = info_list[3]
-            data['sex'] = info_list[4]
-            data['mute'] = info_list[5]
-        with open(ai.parameters.SETTING_PATH, 'w') as fs:
-            json.dump(data, fs)
-        self.logger.debug('modify over')
-        if ai.action.eyedisplay.eyedisplay.EyeDisplay.eye != data['eye']:
-            ai.action.eyedisplay.eyedisplay.EyeDisplay.reset_eye_background()
-        mute = True if data['mute'] == 'true' else False
-        if ai.marsglobal.MarsControl.mute != mute:
-            ai.marsglobal.MarsControl.mute = mute
-
-    def ReadValue(self, options):
-        """
-        Read cat's basic info from local file.
-        the personality value to one decimal place.
-        """
-        self.logger.debug('>>>>>>> Basic Characteristic [read]')
-        with open(ai.parameters.PERSONALITY_SAVE_PATH) as f:
-            personality_data = json.load(f)
-        self.logger.debug(personality_data)
-        energetic = round(personality_data['energetic'], 1)
-        enthusiastic = round(personality_data['enthusiastic'], 1)
-        social = round(personality_data['social'], 1)
-
-        with open(ai.parameters.SETTING_PATH) as fs:
-            data = json.load(fs)
-        self.logger.debug(data)
-        eye = data['eye']
-        sex = data['sex']
-        mute = data['mute']
-
-        battery_value = control_handle.ble_get_battery()
-
-        v = '{}-{}-{}-{}-{}-{}-{}'.format(energetic, enthusiastic, social, eye,
-                                          sex, mute, battery_value)
-        self.logger.debug('read: ' + repr(v))
-
-        value = []
-        for b in v:
-            value.append(dbus.Byte(b.encode()))
-        return value
-
-
-class StateCharacteristic(Characteristic):
-    """
-    The characteristic is used for the Stats page of the app.
-    """
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(self, bus, index, UART_SE_CHARACTERISTIC_UUID,
-                                ['read'], service)
-        self.logger = ai.coloredlogging.get_logger("State",
-                                                   ai.coloredlogging.RED)
-        self.logger.addHandler(logging.NullHandler())
-
-    def ReadValue(self, options):
-        self.logger.debug('>>>>>>> State Characteristic [read]')
-        with open(ai.parameters.PERSONALITY_SAVE_PATH) as f:
-            personality_data = json.load(f)
-        self.logger.debug(str(personality_data))
-        with open(ai.parameters.RECORD_STATE_PATH) as f:
-            state_data = json.load(f)
-        self.logger.debug(str(state_data))
-
-        S = (personality_data['energetic'] + personality_data['enthusiastic'] +
-             personality_data['social']) / 3
-        level = 0
-        experience = 0
-        if S < 25:
-            level = 1
-            experience = S / 25 * 100
-        elif S < 50:
-            level = 2
-            experience = (S - 25) / 25 * 100
-        elif S < 75:
-            level = 3
-            experience = (S - 50) / 25 * 100
-        elif S <= 100:
-            level = 4
-            experience = (S - 75) / 25 * 100
-        self.logger.debug('experience: {}, level: {}'.format(
-            experience, level))
-
-        v = '{}-{}-{}-{}-{}-{}-{}'.format(level, int(experience),
-                                          state_data['touch_count'],
-                                          state_data['voice_count'],
-                                          state_data['vision_count'],
-                                          state_data['sleep_count'],
-                                          state_data['self_play_count'])
-        self.logger.debug('read: ' + repr(v))
-
-        value = []
-        for b in v:
-            value.append(dbus.Byte(b.encode()))
-        return value
-
-
 class UartService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, UART_SERVICE_UUID, True)
         self.add_characteristic(PlayCharacteristic(bus, 0, self))
-        #self.add_characteristic(RxCharacteristic(bus, 1, self))
         self.add_characteristic(UpdateCharacteristic(bus, 2, self))
-        self.add_characteristic(BasicCharacteristic(bus, 3, self))
-        self.add_characteristic(StateCharacteristic(bus, 4, self))
 
 
 class Application(dbus.service.Object):
