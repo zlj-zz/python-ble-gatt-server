@@ -14,26 +14,19 @@ try:
 except ImportError:
     import gobject as GObject
 
-from ai.bt.example_advertisement import Advertisement
-from ai.bt.example_advertisement import register_ad_cb, register_ad_error_cb
-from ai.bt.example_gatt_server import Service, Characteristic
-from ai.bt.example_gatt_server import register_app_cb, register_app_error_cb
-import ai.featurequeue
-import ai.marsglobal
-import ai.action.move.movement
-import ai.action.eyedisplay.eyedisplay
-import ai.parameters
-
-control_handle = ai.action.move.movement.Movements()
+from .example_advertisement import Advertisement
+from .example_advertisement import register_ad_cb, register_ad_error_cb
+from .example_gatt_server import Service, Characteristic
+from .example_gatt_server import register_app_cb, register_app_error_cb
 
 BLUEZ_SERVICE_NAME = 'org.bluez'
 DBUS_OM_IFACE = 'org.freedesktop.DBus.ObjectManager'
 LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_MANAGER_IFACE = 'org.bluez.GattManager1'
 GATT_CHRC_IFACE = 'org.bluez.GattCharacteristic1'
-UART_SERVICE_UUID = '6e400001-b5a3-f393-00a9-e50e24dcca9e'
-UART_RX_CHARACTERISTIC_UUID = '6e400012-b5a3-f393-00a9-e50e24dcca9e'
-UART_TX_CHARACTERISTIC_UUID = '6e400013-b5a3-f393-00a9-e50e24dcca9e'
+UART_SERVICE_UUID = '6e400001-b5a3-f393-00a9-e50e24dcca7d'
+UART_RX_CHARACTERISTIC_UUID = '6e400012-b5a3-f393-00a9-e50e24dcca7d'
+UART_TX_CHARACTERISTIC_UUID = '6e400013-b5a3-f393-00a9-e50e24dcca7d'
 mainloop = None
 global fb
 fb = None
@@ -56,23 +49,13 @@ class PlayCharacteristic(Characteristic):
     if_stop = False
     is_doing = False
     doing_lock = threading.Lock()
-    func_name = ''
 
     def __init__(self, bus, index, service):
         Characteristic.__init__(self, bus, index, UART_TX_CHARACTERISTIC_UUID,
                                 ['read', 'write', 'notify'], service)
 
         self.notifying = False
-        self.notify_type = 'Move'
-        self.notify_type_list = [
-            'Voice', 'Vision', 'Body Sensor', 'Distance Sensor', 'Gyro Sensor'
-        ]
         #GLib.io_add_watch(sys.stdin, GLib.IO_IN, self.notify_voic_command)
-        self.turn_left_thread = None
-        self.turn_right_thread = None
-        self.run_thread = None
-        self.walk_thread = None
-        self.backward_thread = None
 
     def WriteValue(self, value, options):
         """
@@ -81,14 +64,9 @@ class PlayCharacteristic(Characteristic):
         Receive command to enable and disable the control mode.
         """
         s = bytes(value).decode()
-        if s in self.notify_type_list:
-            self.notify_type = s
-        elif s == 'enable_control_mode':
-            ai.marsglobal.MarsControl.control_mode = True
-        elif s == 'disable_control_mode':
-            ai.marsglobal.MarsControl.control_mode = False
-        elif ai.marsglobal.MarsControl.control_mode:
-            self.ble_move_control(s)
+        
+        # next processing.
+        pass
 
     def ReadValue(self, options):
         """
@@ -112,86 +90,12 @@ class PlayCharacteristic(Characteristic):
         self.toggle_notification()
         print('stop notifying')
 
-    def check_if_clear_data(self):
-        if ai.marsglobal.MarsControl.ble_clear_counter > 3:
-            ai.marsglobal.MarsControl.ble_clear_counter = 0
-            ai.featurequeue.FeatureQueue.ble_clear()
-
-    def notify_counter(self):
-        ai.marsglobal.MarsControl.ble_clear_counter += 1
-        self.check_if_clear_data()
-
     def notify_any(self):
         if not self.notifying:
             return
-
-        self.notify_counter()
-
-        feature_dict = ai.featurequeue.FeatureQueue.ble_get()
-        send_dict = {}
-
-        if ai.marsglobal.MarsControl.voice_listening:
-            listen_data = '1'
-        else:
-            listen_data = '0'
-        send_dict['listen'] = listen_data
-
-        if 20 in feature_dict.keys():
-            vocie_data = feature_dict[20]['word']
-            vocie_data = vocie_data[0].upper() + vocie_data[1:].lower()
-        else:
-            vocie_data = ' '
-        send_dict['voice'] = vocie_data
-
-        if 30 in feature_dict.keys():
-            vision_data = 'face'
-        elif 40 in feature_dict.keys():
-            vision_data = 'rat'
-        elif 110 in feature_dict.keys():
-            vision_data = 'ball'
-        else:
-            vision_data = ' '
-        send_dict['vision'] = vision_data
-
-        if 10 in feature_dict.keys():
-            touch_list = feature_dict[10]
-            if touch_list[3] == 0:
-                touch_data = 'jaw'
-            elif touch_list[2] == 0:
-                touch_data = 'body'
-            else:
-                touch_data = 'other'
-        else:
-            touch_data = 'other'
-        send_dict['touch'] = touch_data
-
-        if 70 in feature_dict.keys():
-            distance_data = feature_dict[70]
-            if distance_data > 200:
-                distance_data = 200
-            elif distance_data < 0:
-                distance_data = 200
-        else:
-            distance_data = 200
-        send_dict['distance'] = distance_data
-
-        if 80 in feature_dict.keys():
-            gyro_data = feature_dict[80]
-            gyro_list = [
-                round(float(gyro_data[0]), 2),
-                round(float(gyro_data[1]), 2)
-            ]
-        else:
-            gyro_list = [0.0, 0.0]
-        send_dict['gyro'] = gyro_list
-
-        data = json.dumps(send_dict)
-
-        value = []
-        for b in data:
-            value.append(dbus.Byte(b.encode()))
-
-        self.PropertiesChanged(GATT_CHRC_IFACE, {'Value': value}, [])
+          
+        # main context.
+        pass
 
     def do_notify(self):
         """
@@ -208,35 +112,6 @@ class PlayCharacteristic(Characteristic):
         # each 1s notify one time.
         GObject.timeout_add(1000, self.do_notify)
 
-    def do_action_thread(self):
-        """
-        Feedback control command, start the corresponding action thread.
-        """
-        PlayCharacteristic.doing_lock.acquire()
-        while True:
-            if PlayCharacteristic.if_stop:
-                break
-            # control_handle.ble_turn_left()
-            try:
-                getattr(control_handle, PlayCharacteristic.func_name)()
-            except Exception as e:
-                print(e)
-
-            print('finished at once', PlayCharacteristic.func_name)
-        PlayCharacteristic.doing_lock.release()
-
-    def ble_move_control(self, s):
-        print(ai.parameters.BLE_MOVE[s])
-        if s == 'stand' or s == 'sit' or s == 'lie_down':
-            getattr(control_handle, ai.parameters.BLE_MOVE[s])()
-        elif ai.parameters.BLE_MOVE[s] != '':
-            PlayCharacteristic.if_stop = False
-            PlayCharacteristic.func_name = ai.parameters.BLE_MOVE[s]
-            self.run_thread = threading.Thread(target=self.do_action_thread)
-            self.run_thread.start()
-        else:
-            PlayCharacteristic.if_stop = True
-
 
 class UpdateCharacteristic(Characteristic):
     """
@@ -251,7 +126,7 @@ class UpdateCharacteristic(Characteristic):
         """
         Send marsai version
         """
-        with open(ai.parameters.VERSION_PATH) as f:
+        with open('./version.txt') as f:
             data = f.read()
 
         value = []
@@ -268,8 +143,7 @@ class UpdateCharacteristic(Characteristic):
         if bytes(value) == b'SUD':
             i = 0
             if os.path.exists(str(pathlib.Path.home()) + '/update.zip'):
-                os.system(
-                    'rm {}'.format(str(pathlib.Path.home()) + '/update.zip'))
+                os.remove(str(pathlib.Path.home()) + '/update.zip')
             os.system(
                 'touch {}'.format(str(pathlib.Path.home()) + '/update.zip'))
             fb = open(str(pathlib.Path.home()) + '/update.zip', 'ab+')
