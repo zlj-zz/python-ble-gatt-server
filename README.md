@@ -1,1 +1,1 @@
-# a BLE GATT server demo.
+# Python BLE GATT server demo.
